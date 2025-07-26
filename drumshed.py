@@ -5,8 +5,9 @@ import pandas as pd
 import threading
 import time
 import json
-import simpleaudio as sa
+import numpy as np
 import soundfile as sf
+import io
 
 DATA_FILE = "data.json"
 
@@ -22,6 +23,18 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, default=str, indent=2)
 
+# Generate a short beep sound once
+def generate_beep(frequency=1000, duration=0.1, samplerate=44100):
+    t = np.linspace(0, duration, int(samplerate * duration), False)
+    tone = np.sin(frequency * t * 2 * np.pi)
+    audio = (tone * 32767).astype(np.int16)
+    buf = io.BytesIO()
+    sf.write(buf, audio, samplerate, format='WAV')
+    buf.seek(0)
+    return buf
+
+beep_buffer = generate_beep()
+
 # Load data at start
 data = load_data()
 
@@ -29,19 +42,11 @@ data = load_data()
 def list_files_in_folder(folder_path):
     return [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
 
-def load_sound(sound_path):
-    data, samplerate = sf.read(sound_path, dtype='float32')
-    return data, samplerate
+# --- Metronome logic ---
+metronome_running = False
+metronome_thread = None
 
-def apply_volume(data, volume):
-    return data * volume
-
-def play_sound(data, samplerate):
-    # Convert numpy array to bytes
-    audio_bytes = (data * 32767).astype('<h').tobytes()
-    sa.play_buffer(audio_bytes, 1 if len(data.shape)==1 else data.shape[1], 2, samplerate).wait_done()
-
-def get_timing_and_volumes(feel, tempo):
+def get_timing(feel, tempo):
     if feel == "1/4":
         interval = 60 / tempo
         pattern = ["main"]
@@ -59,40 +64,22 @@ def get_timing_and_volumes(feel, tempo):
         pattern = ["main"]
     return interval, pattern
 
-def get_volumes_for_pattern(pattern):
-    return [1.0 if p == "main" else 0.6 for p in pattern]
-
-def run_metronome(tempo, feel, sound_array, sound_samplerate, stop_event, beat_flag):
-    interval, pattern = get_timing_and_volumes(feel, tempo)
-    volumes = get_volumes_for_pattern(pattern)
-    while not stop_event.is_set():
-        for vol in volumes:
-            if stop_event.is_set():
-                break
-            sound_data = apply_volume(sound_array, vol)
-            threading.Thread(target=play_sound, args=(sound_data, sound_samplerate), daemon=True).start()
-            time.sleep(interval)
-
 # --- Main ---
 st.title("🎶 The Woodshed 🎶")
 
-# --- Always visible controls ---
+# --- Controls ---
 st.subheader("Metronome Settings & Controls")
 sounds_folder = "./sounds"
 sound_files = list_files_in_folder(sounds_folder)
 
-if 'stop_event' not in st.session_state:
-    from threading import Event
-    st.session_state['stop_event'] = threading.Event()
-if 'beat_flag' not in st.session_state:
-    st.session_state['beat_flag'] = {'beat': False}
-if 'metronome_thread' not in st.session_state:
-    st.session_state['metronome_thread'] = None
-if 'is_running' not in st.session_state:
-    st.session_state['is_running'] = False
-
+# Select sound
 selected_sound = st.selectbox("Select Click Sound", sound_files)
 sound_path = os.path.join(sounds_folder, selected_sound)
+
+# Load selected sound
+def load_sound(sound_path):
+    data, sr = sf.read(sound_path, dtype='float32')
+    return data, sr
 sound_array, sr = load_sound(sound_path)
 
 col1, col2 = st.columns([2, 1])
@@ -101,36 +88,30 @@ with col1:
 with col2:
     feel = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"])
 
-def toggle_metronome():
-    if not st.session_state['is_running']:
-        st.session_state['stop_event'].clear()
-        thread = threading.Thread(target=run_metronome, args=(
-            tempo, feel, sound_array, sr, st.session_state['stop_event'], st.session_state['beat_flag']
-        ), daemon=True)
-        thread.start()
-        st.session_state['metronome_thread'] = thread
-        st.session_state['is_running'] = True
+# Placeholder for the audio player
+audio_placeholder = st.empty()
+
+# Start/Stop button
+if 'metronome_state' not in st.session_state:
+    st.session_state['metronome_state'] = False
+
+def start_stop():
+    if not st.session_state['metronome_state']:
+        st.session_state['metronome_state'] = True
+        threading.Thread(target=metronome_loop, args=(tempo, feel), daemon=True).start()
     else:
-        st.session_state['stop_event'].set()
-        st.session_state['metronome_thread'] = None
-        st.session_state['is_running'] = False
+        st.session_state['metronome_state'] = False
 
-if st.button("Start" if not st.session_state['is_running'] else "Stop"):
-    toggle_metronome()
+def metronome_loop(tempo, feel):
+    global metronome_running
+    interval, pattern = get_timing(feel, tempo)
+    while st.session_state['metronome_state']:
+        # Play beep sound
+        # Update st.audio
+        audio_placeholder.audio(beep_buffer.read(), format='audio/wav', start_time=0)
+        time.sleep(interval)
 
-# Visual Indicator
-indicator_placeholder = st.empty()
-time.sleep(0.1)
-current_state = st.query_params.get("metronome", ["stopped"])[0]
-if current_state == "running" and st.session_state['is_running']:
-    if st.session_state['beat_flag'].get('beat', False):
-        indicator_placeholder.markdown("🔴")
-    else:
-        indicator_placeholder.markdown("")
-else:
-    indicator_placeholder.markdown("")
-
-st.write(f"**Current:** {feel} feel at {tempo} BPM.")
+st.button("Start" if not st.session_state['metronome_state'] else "Stop", on_click=start_stop)
 
 # --- Practice Material ---
 st.header("Practice Material")
@@ -184,7 +165,6 @@ with st.expander("View Practice Log Entries", expanded=True):
 # --- Goals & Progress ---
 st.header("Goals & Progress")
 data = load_data()
-# Sort goals by Target Date ascending
 goals = pd.DataFrame(data.get("goals", []))
 if not goals.empty:
     goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
@@ -210,12 +190,11 @@ with st.expander("Add a Goal", expanded=False):
             save_data(data)
             st.success("Goal added!")
 
-# --- Active Goals ---
+# --- View Goals ---
 with st.expander("View Goals", expanded=True):
     data = load_data()
     goals = pd.DataFrame(data.get("goals", []))
     if not goals.empty:
-        # Convert Target Date to datetime and sort
         goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
         goals = goals.sort_values(by='Target Date')
         for idx, row in goals.iterrows():
@@ -229,7 +208,7 @@ with st.expander("View Goals", expanded=True):
                 "Forked": "🟢"
             }
             icon = status_icons.get(row['Status'], "⚪")
-            title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon} "
+            title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon}"
             with st.expander(title, expanded=False):
                 st.write(f"**Details:** {row['Details']}")
                 col1, col2 = st.columns(2)
@@ -237,7 +216,8 @@ with st.expander("View Goals", expanded=True):
                     new_status = st.selectbox(
                         "Update Status",
                         ["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", "Forked"],
-                        index=["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", "Forked"].index(row['Status']),
+                        index=["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", 
+"Forked"].index(row['Status']),
                         key=f"status_{idx}"
                     )
                     if new_status != row['Status']:
@@ -280,5 +260,4 @@ with st.expander("Archived Goals", expanded=False):
                     st.rerun()
     else:
         st.write("No archived goals.")
-
 
