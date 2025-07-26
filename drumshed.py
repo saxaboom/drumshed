@@ -184,7 +184,11 @@ with st.expander("View Practice Log Entries", expanded=True):
 # --- Goals & Progress ---
 st.header("Goals & Progress")
 data = load_data()
+# Sort goals by Target Date ascending
 goals = pd.DataFrame(data.get("goals", []))
+if not goals.empty:
+    goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
+    goals = goals.sort_values(by='Target Date')
 archives = pd.DataFrame(data.get("archives", []))
 
 # --- Add a Goal ---
@@ -206,11 +210,14 @@ with st.expander("Add a Goal", expanded=False):
             save_data(data)
             st.success("Goal added!")
 
-# --- View Goals ---
+# --- Active Goals ---
 with st.expander("View Goals", expanded=True):
     data = load_data()
     goals = pd.DataFrame(data.get("goals", []))
     if not goals.empty:
+        # Convert Target Date to datetime and sort
+        goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
+        goals = goals.sort_values(by='Target Date')
         for idx, row in goals.iterrows():
             status_icons = {
                 "New": "🟢",
@@ -222,7 +229,7 @@ with st.expander("View Goals", expanded=True):
                 "Forked": "🟢"
             }
             icon = status_icons.get(row['Status'], "⚪")
-            title = f"{icon} {row['Goal']} - {row['Status']} - {row['Target Date']}"
+            title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon} "
             with st.expander(title, expanded=False):
                 st.write(f"**Details:** {row['Details']}")
                 col1, col2 = st.columns(2)
@@ -260,16 +267,18 @@ with st.expander("View Goals", expanded=True):
         st.write("No goals set yet.")
 
 # --- Archived Goals ---
-st.header("Archived Goals")
-if not archives.empty:
-    for idx, row in archives.iterrows():
-        title = f"✅ {row['Goal']} - {row['Status']} - {row['Target Date']}"
-        with st.expander(title, expanded=False):
-            st.write(f"**Details:** {row['Details']}")
-            if st.button(f"Delete from Archive", key=f"del_archive_{idx}"):
-                data["archives"].pop(idx)
-                save_data(data)
-                st.success(f"Archived goal '{row['Goal']}' permanently deleted.")
-                st.rerun()
-else:
-    st.write("No archived goals.")
+with st.expander("Archived Goals", expanded=False):
+    if not archives.empty:
+        for idx, row in archives.iterrows():
+            title = f"✅ {row['Goal']} - {row['Status']} - {row['Target Date']}"
+            with st.expander(title, expanded=False):
+                st.write(f"**Details:** {row['Details']}")
+                if st.button(f"Delete from Archive", key=f"del_archive_{idx}"):
+                    data["archives"].pop(idx)
+                    save_data(data)
+                    st.success(f"Archived goal '{row['Goal']}' permanently deleted.")
+                    st.rerun()
+    else:
+        st.write("No archived goals.")
+
+
