@@ -1,17 +1,17 @@
 import streamlit as st
-import os
-from datetime import datetime
-import pandas as pd
 import threading
 import time
+import os
+from datetime import datetime
 import json
+import pandas as pd
 import numpy as np
 import soundfile as sf
 import io
 
 DATA_FILE = "data.json"
 
-# --- Data Handling ---
+# --- Data handling ---
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -23,95 +23,79 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, default=str, indent=2)
 
-# Generate a short beep sound once
-def generate_beep(frequency=1000, duration=0.1, samplerate=44100):
-    t = np.linspace(0, duration, int(samplerate * duration), False)
-    tone = np.sin(frequency * t * 2 * np.pi)
+# --- Generate beep sound once ---
+def generate_beep():
+    t = np.linspace(0, 0.1, int(44100 * 0.1), False)
+    tone = np.sin(1000 * t * 2 * np.pi)
     audio = (tone * 32767).astype(np.int16)
     buf = io.BytesIO()
-    sf.write(buf, audio, samplerate, format='WAV')
+    sf.write(buf, audio, 44100, format='WAV')
     buf.seek(0)
-    return buf
+    return buf.read()
+beep_bytes = generate_beep()
 
-beep_buffer = generate_beep()
+# --- Initialize session state ---
+if 'beep_data' not in st.session_state:
+    st.session_state['beep_data'] = None
+if 'stop_event' not in st.session_state:
+    st.session_state['stop_event'] = threading.Event()
+if 'is_running' not in st.session_state:
+    st.session_state['is_running'] = False
 
-# Load data at start
-data = load_data()
+# --- Metronome thread ---
+def metronome_loop(stop_event, interval):
+    while not stop_event.is_set():
+        # Only set shared data, NOT call st functions here
+        st.session_state['beep_data'] = beep_bytes
+        time.sleep(interval)
 
-# --- Helper Functions ---
-def list_files_in_folder(folder_path):
-    return [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+# --- UI Controls for Metronome ---
+if 'thread' not in st.session_state:
+    st.session_state['thread'] = None
 
-# --- Metronome logic ---
-metronome_running = False
-metronome_thread = None
-
-def get_timing(feel, tempo):
-    if feel == "1/4":
-        interval = 60 / tempo
-        pattern = ["main"]
-    elif feel == "1/8":
-        interval = 60 / (tempo * 2)
-        pattern = ["main", "tap"]
-    elif feel == "Triplet":
-        interval = 60 / (tempo * 3)
-        pattern = ["main", "tap", "tap"]
-    elif feel == "1/16":
-        interval = 60 / (tempo * 4)
-        pattern = ["main", "tap", "tap", "tap"]
+def start_stop():
+    if not st.session_state.get('is_running', False):
+        # Start thread
+        st.session_state['stop_event'].clear()
+        interval = 60 / st.session_state['tempo']
+        thread = threading.Thread(target=metronome_loop, args=(st.session_state['stop_event'], interval), daemon=True)
+        thread.start()
+        st.session_state['thread'] = thread
+        st.session_state['is_running'] = True
     else:
-        interval = 60 / tempo
-        pattern = ["main"]
-    return interval, pattern
+        # Stop thread
+        st.session_state['stop_event'].set()
+        st.session_state['is_running'] = False
 
-# --- Main ---
 st.title("🎶 The Woodshed 🎶")
-
-# --- Controls ---
 st.subheader("Metronome Settings & Controls")
-sounds_folder = "./sounds"
-sound_files = list_files_in_folder(sounds_folder)
 
-# Select sound
+# --- Select sound ---
+sounds_folder = "./sounds"
+sound_files = [f for f in os.listdir(sounds_folder) if os.path.isfile(os.path.join(sounds_folder, f))]
 selected_sound = st.selectbox("Select Click Sound", sound_files)
 sound_path = os.path.join(sounds_folder, selected_sound)
 
-# Load selected sound
-def load_sound(sound_path):
-    data, sr = sf.read(sound_path, dtype='float32')
+def load_sound(path):
+    data, sr = sf.read(path, dtype='float32')
     return data, sr
 sound_array, sr = load_sound(sound_path)
 
 col1, col2 = st.columns([2, 1])
 with col1:
-    tempo = st.slider("Tempo (BPM)", 40, 200, 120)
+    st.session_state['tempo'] = st.slider("Tempo (BPM)", 40, 200, 120)
 with col2:
-    feel = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"])
+    st.session_state['feel'] = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"])
 
-# Placeholder for the audio player
-audio_placeholder = st.empty()
+st.button("Start" if not st.session_state['is_running'] else "Stop", on_click=start_stop)
 
-# Start/Stop button
-if 'metronome_state' not in st.session_state:
-    st.session_state['metronome_state'] = False
+# --- Display current beat indicator ---
+indicator_placeholder = st.empty()
 
-def start_stop():
-    if not st.session_state['metronome_state']:
-        st.session_state['metronome_state'] = True
-        threading.Thread(target=metronome_loop, args=(tempo, feel), daemon=True).start()
-    else:
-        st.session_state['metronome_state'] = False
-
-def metronome_loop(tempo, feel):
-    global metronome_running
-    interval, pattern = get_timing(feel, tempo)
-    while st.session_state['metronome_state']:
-        # Play beep sound
-        # Update st.audio
-        audio_placeholder.audio(beep_buffer.read(), format='audio/wav', start_time=0)
-        time.sleep(interval)
-
-st.button("Start" if not st.session_state['metronome_state'] else "Stop", on_click=start_stop)
+# --- Play beep in browser if available ---
+if st.session_state['beep_data'] is not None:
+    st.audio(st.session_state['beep_data'], format='audio/wav')
+    st.session_state['beep_data'] = None
 
 # --- Practice Material ---
 st.header("Practice Material")
@@ -121,7 +105,7 @@ with st.expander("Browse Practice PDFs & Images", expanded=False):
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
         selected_subfolder = st.selectbox("Select Practice Folder", subfolders)
         subfolder_path = os.path.join(folder, selected_subfolder)
-        files = list_files_in_folder(subfolder_path)
+        files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
         if files:
             selected_file = st.selectbox("Select File", files)
             file_path = os.path.join(subfolder_path, selected_file)
@@ -148,7 +132,6 @@ with st.expander("Add Practice Log Entry", expanded=False):
             "entry": diary
         })
         save_data(data)
-        st.success("Notes saved!")
 
 with st.expander("View Practice Log Entries", expanded=True):
     data = load_data()
@@ -216,8 +199,7 @@ with st.expander("View Goals", expanded=True):
                     new_status = st.selectbox(
                         "Update Status",
                         ["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", "Forked"],
-                        index=["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", 
-"Forked"].index(row['Status']),
+                        index=["New", "In-the-works", "Dormant", "Demo-Ready", "Live-Ready", "Studio-Ready", "Forked"].index(row['Status']),
                         key=f"status_{idx}"
                     )
                     if new_status != row['Status']:
@@ -260,4 +242,3 @@ with st.expander("Archived Goals", expanded=False):
                     st.rerun()
     else:
         st.write("No archived goals.")
-

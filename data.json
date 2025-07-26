@@ -34,6 +34,13 @@
       "Details": "Ask him about Mary Jane. ",
       "Status": "New",
       "Start Date": "2025-07-26"
+    },
+    {
+      "Goal": "train like chuck",
+      "Target Date": "2025-07-26",
+      "Details": "try to beat chuck norris in a fist fight",
+      "Status": "In-the-works",
+      "Start Date": "2025-07-26"
     }
   ],
   "archives": [
@@ -67,4 +74,3 @@
     }
   ]
 }
-
