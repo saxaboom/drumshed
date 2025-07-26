@@ -5,7 +5,7 @@ import pandas as pd
 import threading
 import time
 import json
-import sounddevice as sd
+import simpleaudio as sa
 import soundfile as sf
 
 DATA_FILE = "data.json"
@@ -30,14 +30,16 @@ def list_files_in_folder(folder_path):
     return [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
 
 def load_sound(sound_path):
-    return sf.read(sound_path, dtype='float32')
+    data, samplerate = sf.read(sound_path, dtype='float32')
+    return data, samplerate
 
 def apply_volume(data, volume):
     return data * volume
 
 def play_sound(data, samplerate):
-    sd.play(data, samplerate)
-    sd.wait()
+    # Convert numpy array to bytes
+    audio_bytes = (data * 32767).astype('<h').tobytes()
+    sa.play_buffer(audio_bytes, 1 if len(data.shape)==1 else data.shape[1], 2, samplerate).wait_done()
 
 def get_timing_and_volumes(feel, tempo):
     if feel == "1/4":
@@ -60,16 +62,15 @@ def get_timing_and_volumes(feel, tempo):
 def get_volumes_for_pattern(pattern):
     return [1.0 if p == "main" else 0.6 for p in pattern]
 
-def run_metronome(tempo, feel, sound_file_path, stop_event, beat_flag, main_sound):
-    data, samplerate = load_sound(sound_file_path)
+def run_metronome(tempo, feel, sound_array, sound_samplerate, stop_event, beat_flag):
     interval, pattern = get_timing_and_volumes(feel, tempo)
     volumes = get_volumes_for_pattern(pattern)
     while not stop_event.is_set():
         for vol in volumes:
             if stop_event.is_set():
                 break
-            sound_data = apply_volume(main_sound, vol)
-            threading.Thread(target=play_sound, args=(sound_data, samplerate), daemon=True).start()
+            sound_data = apply_volume(sound_array, vol)
+            threading.Thread(target=play_sound, args=(sound_data, sound_samplerate), daemon=True).start()
             time.sleep(interval)
 
 # --- Main ---
@@ -92,7 +93,7 @@ if 'is_running' not in st.session_state:
 
 selected_sound = st.selectbox("Select Click Sound", sound_files)
 sound_path = os.path.join(sounds_folder, selected_sound)
-main_sound, sr = load_sound(sound_path)
+sound_array, sr = load_sound(sound_path)
 
 col1, col2 = st.columns([2, 1])
 with col1:
@@ -103,19 +104,13 @@ with col2:
 def toggle_metronome():
     if not st.session_state['is_running']:
         st.session_state['stop_event'].clear()
-        new_params = dict(st.query_params)
-        new_params['metronome'] = "running"
-        st.query_params = new_params
         thread = threading.Thread(target=run_metronome, args=(
-            tempo, feel, sound_path, st.session_state['stop_event'], st.session_state['beat_flag'], main_sound
+            tempo, feel, sound_array, sr, st.session_state['stop_event'], st.session_state['beat_flag']
         ), daemon=True)
         thread.start()
         st.session_state['metronome_thread'] = thread
         st.session_state['is_running'] = True
     else:
-        new_params = dict(st.query_params)
-        new_params['metronome'] = "stopped"
-        st.query_params = new_params
         st.session_state['stop_event'].set()
         st.session_state['metronome_thread'] = None
         st.session_state['is_running'] = False
@@ -162,9 +157,7 @@ with st.expander("Browse Practice PDFs & Images", expanded=False):
         st.write("Images folder not found.")
 
 # --- Practice Log / Diary ---
-
 st.header("Practice Log / Diary")
-# Add entry form inside expander
 with st.expander("Add Practice Log Entry", expanded=False):
     diary = st.text_area("Notes on today's session")
     if st.button("Save Notes"):
@@ -176,7 +169,6 @@ with st.expander("Add Practice Log Entry", expanded=False):
         save_data(data)
         st.success("Notes saved!")
 
-# View practice log entries
 with st.expander("View Practice Log Entries", expanded=True):
     data = load_data()
     logs = data.get("practice_log", [])
@@ -195,7 +187,7 @@ data = load_data()
 goals = pd.DataFrame(data.get("goals", []))
 archives = pd.DataFrame(data.get("archives", []))
 
-# --- Add a Goal form inside an expander ---
+# --- Add a Goal ---
 with st.expander("Add a Goal", expanded=False):
     with st.form("add_goal_form"):
         goal_text = st.text_input("Goal")
@@ -214,7 +206,7 @@ with st.expander("Add a Goal", expanded=False):
             save_data(data)
             st.success("Goal added!")
 
-# --- Active Goals with Update & Archive ---
+# --- View Goals ---
 with st.expander("View Goals", expanded=True):
     data = load_data()
     goals = pd.DataFrame(data.get("goals", []))
@@ -232,9 +224,7 @@ with st.expander("View Goals", expanded=True):
             icon = status_icons.get(row['Status'], "⚪")
             title = f"{icon} {row['Goal']} - {row['Status']} - {row['Target Date']}"
             with st.expander(title, expanded=False):
-                # Show Details
                 st.write(f"**Details:** {row['Details']}")
-                # Update Status
                 col1, col2 = st.columns(2)
                 with col1:
                     new_status = st.selectbox(
@@ -248,7 +238,6 @@ with st.expander("View Goals", expanded=True):
                         save_data(data)
                         st.success(f"Status for '{row['Goal']}' updated.")
                         st.rerun()
-                # Action dropdown for archive/delete
                 with col2:
                     action = st.selectbox(
                         "Action",
@@ -257,7 +246,6 @@ with st.expander("View Goals", expanded=True):
                         key=f"action_{idx}"
                     )
                     if action == "Success":
-                        # Move to archives
                         data["archives"].append({**row, "Status": "Forked"})
                         data["goals"].pop(idx)
                         save_data(data)
@@ -279,11 +267,9 @@ if not archives.empty:
         with st.expander(title, expanded=False):
             st.write(f"**Details:** {row['Details']}")
             if st.button(f"Delete from Archive", key=f"del_archive_{idx}"):
-                # Remove from archives
                 data["archives"].pop(idx)
                 save_data(data)
                 st.success(f"Archived goal '{row['Goal']}' permanently deleted.")
                 st.rerun()
 else:
     st.write("No archived goals.")
-    
