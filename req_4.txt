@@ -1,3 +1,0 @@
-simpleaudio==1.0.4
-#sounddevice==0.5.2
-soundfile==0.13.1
