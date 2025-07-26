@@ -11,6 +11,10 @@
     {
       "timestamp": "2025-07-26 12:05:59.395172",
       "entry": "cox 40 "
+    },
+    {
+      "timestamp": "2025-07-26 17:18:54.130286",
+      "entry": "Getting some content uploaded and a stable deploy. \nTodo: Figure out why no audio playing.. it's tricky. "
     }
   ],
   "goals": [
@@ -40,6 +44,13 @@
       "Target Date": "2025-07-26",
       "Details": "try to beat chuck norris in a fist fight",
       "Status": "In-the-works",
+      "Start Date": "2025-07-26"
+    },
+    {
+      "Goal": "Get Metronome Audio Working",
+      "Target Date": "2025-07-31",
+      "Details": "tried various ways.. need fresh look : )",
+      "Status": "New",
       "Start Date": "2025-07-26"
     }
   ],

@@ -9,25 +9,9 @@ import numpy as np
 import soundfile as sf
 import io
 
-# --- Constants ---
 DATA_FILE = "data.json"
-SOUNDS_FOLDER = "./sounds"
 
-# --- Initialize Session State Variables ---
-# These should be initialized once at startup
-for key, default in [
-    ('is_running', False),
-    ('stop_metronome', False),
-    ('current_beat', 0),
-    ('audio_trigger', False),
-    ('should_rerun', False),
-    ('tempo', 120),
-    ('feel', "1/4"),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-# --- Load Data ---
+# --- Data handling ---
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -39,109 +23,101 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, default=str, indent=2)
 
-# --- Generate Beep Sound ---
-def generate_beep():
-    t = np.linspace(0, 0.1, int(44100 * 0.1), False)
-    tone = np.sin(1000 * t * 2 * np.pi)
+# --- Generate beep sound once ---
+def generate_beep(frequency=1000, duration=0.1, samplerate=44100):
+    t = np.linspace(0, duration, int(samplerate * duration), False)
+    tone = np.sin(frequency * t * 2 * np.pi)
     audio = (tone * 32767).astype(np.int16)
     buf = io.BytesIO()
-    sf.write(buf, audio, 44100, format='WAV')
+    sf.write(buf, audio, samplerate, format='WAV')
     buf.seek(0)
     return buf.read()
 
 beep_bytes = generate_beep()
 
-# --- Load Selected Sound ---
-def load_sound(path):
-    data, sr = sf.read(path, dtype='float32')
-    return data, sr
+# --- Initialize session state ---
+if 'beep_data' not in st.session_state:
+    st.session_state['beep_data'] = None
+if 'stop_event' not in st.session_state:
+    st.session_state['stop_event'] = threading.Event()
+if 'is_running' not in st.session_state:
+    st.session_state['is_running'] = False
 
-# --- UI: Title and Settings ---
+# --- Metronome thread ---
+def metronome_loop(stop_event, interval):
+    while not stop_event.is_set():
+        # Update shared beep data for main thread to play
+        st.session_state['beep_data'] = beep_bytes
+        time.sleep(interval)
+
+# --- UI Controls for Metronome ---
+if 'thread' not in st.session_state:
+    st.session_state['thread'] = None
+
+def start_stop():
+    if not st.session_state['is_running']:
+        # Start the background thread
+        st.session_state['stop_event'].clear()
+        interval = 60 / st.session_state['tempo']
+        st.session_state['thread'] = threading.Thread(target=metronome_loop, args=(st.session_state['stop_event'], interval), daemon=True)
+        st.session_state['thread'].start()
+        st.session_state['is_running'] = True
+    else:
+        # Stop the background thread
+        st.session_state['stop_event'].set()
+        st.session_state['is_running'] = False
+
 st.title("🎶 The Woodshed 🎶")
 st.subheader("Metronome Settings & Controls")
 
-# --- Select Sound ---
-sounds_files = [f for f in os.listdir(SOUNDS_FOLDER) if os.path.isfile(os.path.join(SOUNDS_FOLDER, f))]
-selected_sound = st.selectbox("Select Click Sound", sounds_files)
-sound_path = os.path.join(SOUNDS_FOLDER, selected_sound)
+# --- Select sound ---
+sounds_folder = "./sounds"
+sound_files = [f for f in os.listdir(sounds_folder) if os.path.isfile(os.path.join(sounds_folder, f))]
+selected_sound = st.selectbox("Select Click Sound", sound_files)
+sound_path = os.path.join(sounds_folder, selected_sound)
+
+def load_sound(path):
+    data, sr = sf.read(path, dtype='float32')
+    return data, sr
 sound_array, sr = load_sound(sound_path)
 
-# --- Sliders and Selectboxes ---
 col1, col2 = st.columns([2, 1])
 with col1:
-    st.session_state['tempo'] = st.slider("Tempo (BPM)", 40, 200, st.session_state['tempo'])
+    st.session_state['tempo'] = st.slider("Tempo (BPM)", 40, 200, 120)
 with col2:
-    st.session_state['feel'] = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"], index=["1/4", "1/8", "Triplet", "1/16"].index(st.session_state['feel']))
-
-# --- Start/Stop Button ---
-def start_stop():
-    if not st.session_state['is_running']:
-        st.session_state['is_running'] = True
-        st.session_state['stop_metronome'] = False
-        st.session_state['current_beat'] = 0
-        st.session_state['audio_trigger'] = False
-        start_metronome(st.session_state['tempo'])
-        st.rerun()
-    else:
-        st.session_state['stop_metronome'] = True
-        st.session_state['is_running'] = False
-        st.rerun()
+    st.session_state['feel'] = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"])
 
 st.button("Start" if not st.session_state['is_running'] else "Stop", on_click=start_stop)
 
-# --- Background Metronome Thread ---
-def start_metronome(tempo):
-    def metronome():
-        interval = 60.0 / tempo
-        while not st.session_state['stop_metronome']:
-            # Signal main app to play sound
-            st.session_state['audio_trigger'] = True
-            st.session_state['current_beat'] += 1
-            # Set rerun flag
-            st.session_state['should_rerun'] = True
-            time.sleep(interval)
-    t = threading.Thread(target=metronome, daemon=True)
-    st.session_state['metronome_thread'] = t
-    t.start()
+# --- Display current beat indicator ---
+indicator_placeholder = st.empty()
 
-# --- Check if rerun is needed ---
-if st.session_state.get('should_rerun', False):
-    st.session_state['should_rerun'] = False
-    st.rerun()
+# --- Play beep in browser if available ---
+if st.session_state['beep_data'] is not None:
+    st.audio(st.session_state['beep_data'], format='audio/wav')
+    st.session_state['beep_data'] = None
 
-# --- Play beep when triggered ---
-if st.session_state.get('audio_trigger', False):
-    st.audio(beep_bytes, format='audio/wav')
-    st.session_state['audio_trigger'] = False
-
-# --- Display current beat ---
-st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
-
-
-# --- Practice Material Section ---
+# --- Practice Material ---
 st.header("Practice Material")
 with st.expander("Browse Practice PDFs & Images", expanded=False):
     folder = "images"
     if os.path.exists(folder):
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
-        if subfolders:
-            selected_subfolder = st.selectbox("Select Practice Folder", subfolders)
-            subfolder_path = os.path.join(folder, selected_subfolder)
-            files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
-            if files:
-                selected_file = st.selectbox("Select File", files)
-                file_path = os.path.join(subfolder_path, selected_file)
-                if selected_file.endswith('.pdf'):
-                    st.write("PDF viewing is limited in Streamlit. Download below:")
-                    st.markdown(f"[Download {selected_file}](/{file_path})")
-                elif selected_file.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    st.image(file_path, use_container_width=True)
-                else:
-                    st.write("File type not supported for preview.")
+        selected_subfolder = st.selectbox("Select Practice Folder", subfolders)
+        subfolder_path = os.path.join(folder, selected_subfolder)
+        files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
+        if files:
+            selected_file = st.selectbox("Select File", files)
+            file_path = os.path.join(subfolder_path, selected_file)
+            if selected_file.endswith('.pdf'):
+                st.write("PDF viewing is limited in Streamlit. Download below:")
+                st.markdown(f"[Download {selected_file}](/{file_path})")
+            elif selected_file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                st.image(file_path, use_container_width=True)
             else:
-                st.write("No files in this folder.")
+                st.write("File type not supported for preview.")
         else:
-            st.write("No subfolders found.")
+            st.write("No files in this folder.")
     else:
         st.write("Images folder not found.")
 
@@ -172,11 +148,11 @@ with st.expander("View Practice Log Entries", expanded=True):
 # --- Goals & Progress ---
 st.header("Goals & Progress")
 data = load_data()
-goals_df = pd.DataFrame(data.get("goals", []))
-if not goals_df.empty:
-    goals_df['Target Date'] = pd.to_datetime(goals_df['Target Date'], errors='coerce')
-    goals_df = goals_df.sort_values(by='Target Date')
-archives_df = pd.DataFrame(data.get("archives", []))
+goals = pd.DataFrame(data.get("goals", []))
+if not goals.empty:
+    goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
+    goals = goals.sort_values(by='Target Date')
+archives = pd.DataFrame(data.get("archives", []))
 
 # --- Add a Goal ---
 with st.expander("Add a Goal", expanded=False):
@@ -196,16 +172,15 @@ with st.expander("Add a Goal", expanded=False):
             data["goals"].append(new_goal)
             save_data(data)
             st.success("Goal added!")
-            st.rerun()
 
 # --- View Goals ---
 with st.expander("View Goals", expanded=True):
     data = load_data()
-    goals_df = pd.DataFrame(data.get("goals", []))
-    if not goals_df.empty:
-        goals_df['Target Date'] = pd.to_datetime(goals_df['Target Date'], errors='coerce')
-        goals_df = goals_df.sort_values(by='Target Date')
-        for idx, row in goals_df.iterrows():
+    goals = pd.DataFrame(data.get("goals", []))
+    if not goals.empty:
+        goals['Target Date'] = pd.to_datetime(goals['Target Date'], errors='coerce')
+        goals = goals.sort_values(by='Target Date')
+        for idx, row in goals.iterrows():
             status_icons = {
                 "New": "🟢",
                 "In-the-works": "🟡",
@@ -255,10 +230,8 @@ with st.expander("View Goals", expanded=True):
 
 # --- Archived Goals ---
 with st.expander("Archived Goals", expanded=False):
-    data = load_data()
-    archives_df = pd.DataFrame(data.get("archives", []))
-    if not archives_df.empty:
-        for idx, row in archives_df.iterrows():
+    if not archives.empty:
+        for idx, row in archives.iterrows():
             title = f"✅ {row['Goal']} - {row['Status']} - {row['Target Date']}"
             with st.expander(title, expanded=False):
                 st.write(f"**Details:** {row['Details']}")
