@@ -57,8 +57,24 @@ def load_sound(path):
     return data, sr
 
 # --- UI: Title and Settings ---
-st.title("🎶 The Woodshed 🎶")
-st.subheader("Metronome Settings & Controls")
+# st.title("🎶Drumshed🎶")
+
+# only logo full page
+st.image("images/logo.jpeg", use_container_width=True)
+
+# # Create two columns with ratios 3:2 for 60% and 40%
+# col1, col2 = st.columns([3, 2])  # 3 parts for title, 2 parts for image
+
+# with col1:
+#     # Display the title
+#     st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'> * * Drumshed * * </h1>", unsafe_allow_html=True)
+#     # st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'>🎶 * * Drumshed * * 🎶</h1>", unsafe_allow_html=True)
+
+# with col2:
+#     # Display the logo image with dynamic scaling
+#     st.image("images/logo.jpeg", use_container_width=True)
+
+st.subheader("Metronome")
 
 # --- Select Sound ---
 sounds_files = [f for f in os.listdir(SOUNDS_FOLDER) if os.path.isfile(os.path.join(SOUNDS_FOLDER, f))]
@@ -119,13 +135,13 @@ st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
 
 
 # --- Practice Material Section ---
-st.header("Practice Material")
-with st.expander("Browse Practice PDFs & Images", expanded=False):
+st.subheader("Practice Archive")
+with st.expander("Show Window", expanded=False):
     folder = "images"
     if os.path.exists(folder):
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
         if subfolders:
-            selected_subfolder = st.selectbox("Select Practice Folder", subfolders)
+            selected_subfolder = st.selectbox("Select Folder", subfolders)
             subfolder_path = os.path.join(folder, selected_subfolder)
             files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
             if files:
@@ -146,7 +162,7 @@ with st.expander("Browse Practice PDFs & Images", expanded=False):
         st.write("Images folder not found.")
 
 # --- Practice Log / Diary ---
-st.header("Practice Log / Diary")
+st.subheader("Practice Log")
 with st.expander("Add Practice Log Entry", expanded=False):
     diary = st.text_area("Notes on today's session")
     if st.button("Save Notes"):
@@ -170,7 +186,7 @@ with st.expander("View Practice Log Entries", expanded=True):
                 st.rerun()
 
 # --- Goals & Progress ---
-st.header("Goals & Progress")
+st.subheader("Goals & Progress")
 data = load_data()
 goals_df = pd.DataFrame(data.get("goals", []))
 if not goals_df.empty:
