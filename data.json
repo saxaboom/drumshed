@@ -22,35 +22,35 @@
       "Goal": "Improve jazz improvisation",
       "Target Date": "2024-05-15",
       "Details": "Focus on bebop scales and phrasing.",
-      "Status": "Dormant",
+      "Status": "Live-Ready",
       "Start Date": "2024-04-01"
     },
     {
       "Goal": "Learn the blues shuffle",
       "Target Date": "2024-05-10",
       "Details": "Master the shuffle rhythm and phrasing.",
-      "Status": "Live-Ready",
+      "Status": "Studio-Ready",
       "Start Date": "2024-04-15"
     },
     {
       "Goal": "Meet Rick James",
       "Target Date": "2025-08-13",
       "Details": "Ask him about Mary Jane. ",
-      "Status": "New",
+      "Status": "Forked",
       "Start Date": "2025-07-26"
     },
     {
       "Goal": "train like chuck",
       "Target Date": "2025-07-26",
       "Details": "try to beat chuck norris in a fist fight",
-      "Status": "In-the-works",
+      "Status": "Demo-Ready",
       "Start Date": "2025-07-26"
     },
     {
       "Goal": "Get Metronome Audio Working",
       "Target Date": "2025-07-31",
       "Details": "tried various ways.. need fresh look : )",
-      "Status": "New",
+      "Status": "In-the-works",
       "Start Date": "2025-07-26"
     },
     {

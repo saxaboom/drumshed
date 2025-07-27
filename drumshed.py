@@ -223,16 +223,18 @@ with st.expander("View Goals", expanded=True):
         goals_df = goals_df.sort_values(by='Target Date')
         for idx, row in goals_df.iterrows():
             status_icons = {
-                "New": "🟢",
-                "In-the-works": "🟡",
+                "New": "🟣",
+                "In-the-works": "🟡🟠🟠",
                 "Dormant": "🟤",
-                "Demo-Ready": "🔵",
-                "Live-Ready": "🟠",
-                "Studio-Ready": "🟣",
-                "Forked": "🟢"
+                "Demo-Ready": "🟡🟡🟠🟠🟠🟢",
+                "Live-Ready": "🟡🟡🟠🟠🟠🟢🟢🟢",
+                "Studio-Ready": "🟡🟡🟠🟠🟠🟢🟢🟢🟢🔴🔴",
+                # "Studio-Ready": "🟣🟣🟣🟣", #🔴🔴
+                "Forked": "🔴"
             }
             icon = status_icons.get(row['Status'], "⚪")
-            title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon}"
+            title = f"{icon}  -  **{row['Goal']}** - by - {row['Target Date'].date()} - currently: **{row['Status']}**"
+            # title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon}"
             with st.expander(title, expanded=False):
                 st.write(f"**Details:** {row['Details']}")
                 col1, col2 = st.columns(2)
