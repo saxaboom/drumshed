@@ -56,6 +56,22 @@ def load_sound(path):
     data, sr = sf.read(path, dtype='float32')
     return data, sr
 
+# --style section --
+# #6A7015.meh   #444A25.olive-ish #324A25.forest #34422B** #3F422B.too.light.needs.dif.text.color #222920.jungle.green #262920.army.green ##202923.deeper.forest.cool
+# Define custom CSS to set the background color #3F4A29 ##4A4529.nice.better.we.like.so.far  #52502F.workable #252D1A #43522F #3D4B2B #323C24
+# Insert your CSS styling at the top #2C3023.looks.good.too.darker #808000
+background_style = """
+    <style>
+    .stApp {
+        background-color: #4A4529; /* Olive Drab color */
+    }
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    </style>
+"""
+st.markdown(background_style, unsafe_allow_html=True)
 # --- UI: Title and Settings ---
 # st.title("🎶Drumshed🎶")
 
