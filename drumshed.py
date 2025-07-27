@@ -152,7 +152,7 @@ st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
 
 # --- Practice Material Section ---
 st.subheader("Practice Files")
-with st.expander("Show Window", expanded=False):
+with st.expander("View Files", expanded=False):
     folder = "images"
     if os.path.exists(folder):
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
@@ -179,7 +179,7 @@ with st.expander("Show Window", expanded=False):
 
 # --- Practice Log / Diary ---
 st.subheader("Practice Log")
-with st.expander("Add Practice Log Entry", expanded=False):
+with st.expander("Add Notes", expanded=False):
     diary = st.text_area("Notes on today's session")
     if st.button("Save Notes"):
         data = load_data()
@@ -189,7 +189,7 @@ with st.expander("Add Practice Log Entry", expanded=False):
         })
         save_data(data)
 
-with st.expander("View Practice Log Entries", expanded=True):
+with st.expander("View Notes", expanded=True):
     data = load_data()
     logs = data.get("practice_log", [])
     for idx, entry in reversed(list(enumerate(logs))):
@@ -211,7 +211,7 @@ if not goals_df.empty:
 archives_df = pd.DataFrame(data.get("archives", []))
 
 # --- Add a Goal ---
-with st.expander("Add a Goal", expanded=False):
+with st.expander("Add Goal", expanded=False):
     with st.form("add_goal_form"):
         goal_text = st.text_input("Goal")
         target_date = st.date_input("Target Date")
@@ -288,7 +288,7 @@ with st.expander("View Goals", expanded=True):
         st.write("No goals set yet.")
 
 # --- Archived Goals ---
-with st.expander("Archived Goals", expanded=False):
+with st.expander("Done Pile", expanded=False):
     data = load_data()
     archives_df = pd.DataFrame(data.get("archives", []))
     if not archives_df.empty:
