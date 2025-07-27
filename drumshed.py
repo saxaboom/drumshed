@@ -151,7 +151,7 @@ st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
 
 
 # --- Practice Material Section ---
-st.subheader("Practice Archive")
+st.subheader("Practice Files")
 with st.expander("Show Window", expanded=False):
     folder = "images"
     if os.path.exists(folder):
