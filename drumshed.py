@@ -2,6 +2,7 @@ import streamlit as st
 import threading
 import time
 import os
+import re
 from datetime import datetime
 import json
 import pandas as pd
@@ -56,40 +57,11 @@ def load_sound(path):
     data, sr = sf.read(path, dtype='float32')
     return data, sr
 
-# --style section --
-# #6A7015.meh   #444A25.olive-ish #324A25.forest #34422B** #3F422B.too.light.needs.dif.text.color #222920.jungle.green #262920.army.green ##202923.deeper.forest.cool
-# Define custom CSS to set the background color #3F4A29 ##4A4529.nice.better.we.like.so.far  #52502F.workable #252D1A #43522F #3D4B2B #323C24
-# Insert your CSS styling at the top #2C3023.looks.good.too.darker #808000
-# background_style = """
-#     <style>
-#     .stApp {
-#         background-color: #4A4529; /* Olive Drab color */
-#     }
-#     body {
-#         margin: 0;
-#         padding: 0;
-#     }
-#     </style>
-# """
-# st.markdown(background_style, unsafe_allow_html=True)
 # --- UI: Title and Settings ---
 # st.title("🎶Drumshed🎶")
 
 # only logo full page
 st.image("images/logo.jpeg", use_container_width=True)
-
-# # Create two columns with ratios 3:2 for 60% and 40%
-# col1, col2 = st.columns([3, 2])  # 3 parts for title, 2 parts for image
-
-# with col1:
-#     # Display the title
-#     st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'> * * Drumshed * * </h1>", unsafe_allow_html=True)
-#     # st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'>🎶 * * Drumshed * * 🎶</h1>", unsafe_allow_html=True)
-
-# with col2:
-#     # Display the logo image with dynamic scaling
-#     st.image("images/logo.jpeg", use_container_width=True)
-
 st.subheader("Metronome")
 
 # --- Select Sound ---
@@ -150,19 +122,66 @@ if st.session_state.get('audio_trigger', False):
 st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
 
 
+import os
+import re
+import streamlit as st
+
 # --- Practice Material Section ---
 st.subheader("Practice Files")
 with st.expander("View Files", expanded=False):
     folder = "images"
     if os.path.exists(folder):
+        # Get subfolders
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
-        if subfolders:
-            selected_subfolder = st.selectbox("Select Folder", subfolders)
+        
+        # Function to extract the prefix for sorting subfolders
+        def get_prefix(folder_name):
+            match = re.match(r'^([A-Za-z0-9]+)', folder_name)
+            return match.group(1) if match else folder_name
+
+        # Sort subfolders based on prefix
+        subfolders_sorted = sorted(subfolders, key=get_prefix)
+
+        if subfolders_sorted:
+            # Prepare display names without the prefix for subfolders
+            subfolder_display_map = {}
+            subfolder_display_names = []
+
+            for sf in subfolders_sorted:
+                # Remove prefix and underscore
+                name_without_prefix = re.sub(r'^[A-Za-z0-9]+_', '', sf)
+                subfolder_display_names.append(name_without_prefix)
+                subfolder_display_map[name_without_prefix] = sf
+
+            selected_subfolder_display = st.selectbox("Select Folder", subfolder_display_names)
+            selected_subfolder = subfolder_display_map[selected_subfolder_display]
             subfolder_path = os.path.join(folder, selected_subfolder)
+
+            # List files in selected subfolder
             files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
+
             if files:
-                selected_file = st.selectbox("Select File", files)
+                # Sort files based on prefix
+                def get_file_prefix(filename):
+                    match = re.match(r'^([A-Za-z0-9]+)', filename)
+                    return match.group(1) if match else filename
+
+                files_sorted = sorted(files, key=get_file_prefix)
+
+                # Create display names for files (remove prefix and extension)
+                file_display_map = {}
+                file_display_names = []
+
+                for f in files_sorted:
+                    name_without_prefix = re.sub(r'^[^_]*_', '', f)
+                    name_without_ext = re.sub(r'\.[^.]+$', '', name_without_prefix)
+                    file_display_names.append(name_without_ext)
+                    file_display_map[name_without_ext] = f
+
+                selected_file_display = st.selectbox("Select File", file_display_names)
+                selected_file = file_display_map[selected_file_display]
                 file_path = os.path.join(subfolder_path, selected_file)
+
                 if selected_file.endswith('.pdf'):
                     st.write("PDF viewing is limited in Streamlit. Download below:")
                     st.markdown(f"[Download {selected_file}](/{file_path})")
@@ -176,6 +195,8 @@ with st.expander("View Files", expanded=False):
             st.write("No subfolders found.")
     else:
         st.write("Images folder not found.")
+
+        
 
 # --- Practice Log / Diary ---
 st.subheader("Practice Log")

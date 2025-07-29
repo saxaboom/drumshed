@@ -2,7 +2,6 @@ import streamlit as st
 import threading
 import time
 import os
-import re
 from datetime import datetime
 import json
 import pandas as pd
@@ -62,6 +61,19 @@ def load_sound(path):
 
 # only logo full page
 st.image("images/logo.jpeg", use_container_width=True)
+
+# # Create two columns with ratios 3:2 for 60% and 40%
+# col1, col2 = st.columns([3, 2])  # 3 parts for title, 2 parts for image
+
+# with col1:
+#     # Display the title
+#     st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'> * * Drumshed * * </h1>", unsafe_allow_html=True)
+#     # st.markdown("<h1 style='display:inline-block; vertical-align:bottom;'>🎶 * * Drumshed * * 🎶</h1>", unsafe_allow_html=True)
+
+# with col2:
+#     # Display the logo image with dynamic scaling
+#     st.image("images/logo.jpeg", use_container_width=True)
+
 st.subheader("Metronome")
 
 # --- Select Sound ---
@@ -122,66 +134,19 @@ if st.session_state.get('audio_trigger', False):
 st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
 
 
-import os
-import re
-import streamlit as st
-
 # --- Practice Material Section ---
-st.subheader("Practice Files")
-with st.expander("View Files", expanded=False):
+st.subheader("Practice Archive")
+with st.expander("Browse Practice PDFs & Images", expanded=False):
     folder = "images"
     if os.path.exists(folder):
-        # Get subfolders
         subfolders = [sf for sf in os.listdir(folder) if os.path.isdir(os.path.join(folder, sf))]
-        
-        # Function to extract the prefix for sorting subfolders
-        def get_prefix(folder_name):
-            match = re.match(r'^([A-Za-z0-9]+)', folder_name)
-            return match.group(1) if match else folder_name
-
-        # Sort subfolders based on prefix
-        subfolders_sorted = sorted(subfolders, key=get_prefix)
-
-        if subfolders_sorted:
-            # Prepare display names without the prefix for subfolders
-            subfolder_display_map = {}
-            subfolder_display_names = []
-
-            for sf in subfolders_sorted:
-                # Remove prefix and underscore
-                name_without_prefix = re.sub(r'^[A-Za-z0-9]+_', '', sf)
-                subfolder_display_names.append(name_without_prefix)
-                subfolder_display_map[name_without_prefix] = sf
-
-            selected_subfolder_display = st.selectbox("Select Folder", subfolder_display_names)
-            selected_subfolder = subfolder_display_map[selected_subfolder_display]
+        if subfolders:
+            selected_subfolder = st.selectbox("Select Practice Folder", subfolders)
             subfolder_path = os.path.join(folder, selected_subfolder)
-
-            # List files in selected subfolder
             files = [f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))]
-
             if files:
-                # Sort files based on prefix
-                def get_file_prefix(filename):
-                    match = re.match(r'^([A-Za-z0-9]+)', filename)
-                    return match.group(1) if match else filename
-
-                files_sorted = sorted(files, key=get_file_prefix)
-
-                # Create display names for files (remove prefix and extension)
-                file_display_map = {}
-                file_display_names = []
-
-                for f in files_sorted:
-                    name_without_prefix = re.sub(r'^[^_]*_', '', f)
-                    name_without_ext = re.sub(r'\.[^.]+$', '', name_without_prefix)
-                    file_display_names.append(name_without_ext)
-                    file_display_map[name_without_ext] = f
-
-                selected_file_display = st.selectbox("Select File", file_display_names)
-                selected_file = file_display_map[selected_file_display]
+                selected_file = st.selectbox("Select File", files)
                 file_path = os.path.join(subfolder_path, selected_file)
-
                 if selected_file.endswith('.pdf'):
                     st.write("PDF viewing is limited in Streamlit. Download below:")
                     st.markdown(f"[Download {selected_file}](/{file_path})")
@@ -196,11 +161,9 @@ with st.expander("View Files", expanded=False):
     else:
         st.write("Images folder not found.")
 
-        
-
 # --- Practice Log / Diary ---
 st.subheader("Practice Log")
-with st.expander("Add Notes", expanded=False):
+with st.expander("Add Practice Log Entry", expanded=False):
     diary = st.text_area("Notes on today's session")
     if st.button("Save Notes"):
         data = load_data()
@@ -210,7 +173,7 @@ with st.expander("Add Notes", expanded=False):
         })
         save_data(data)
 
-with st.expander("View Notes", expanded=True):
+with st.expander("View Practice Log Entries", expanded=True):
     data = load_data()
     logs = data.get("practice_log", [])
     for idx, entry in reversed(list(enumerate(logs))):
@@ -232,7 +195,7 @@ if not goals_df.empty:
 archives_df = pd.DataFrame(data.get("archives", []))
 
 # --- Add a Goal ---
-with st.expander("Add Goal", expanded=False):
+with st.expander("Add a Goal", expanded=False):
     with st.form("add_goal_form"):
         goal_text = st.text_input("Goal")
         target_date = st.date_input("Target Date")
@@ -260,18 +223,16 @@ with st.expander("View Goals", expanded=True):
         goals_df = goals_df.sort_values(by='Target Date')
         for idx, row in goals_df.iterrows():
             status_icons = {
-                "New": "🟣",
-                "In-the-works": "🟡🟠🟠",
+                "New": "🟢",
+                "In-the-works": "🟡",
                 "Dormant": "🟤",
-                "Demo-Ready": "🟡🟡🟠🟠🟠🟢",
-                "Live-Ready": "🟡🟡🟠🟠🟠🟢🟢🟢",
-                "Studio-Ready": "🟡🟡🟠🟠🟠🟢🟢🟢🟢🔴🔴",
-                # "Studio-Ready": "🟣🟣🟣🟣", #🔴🔴
-                "Forked": "🔴"
+                "Demo-Ready": "🔵",
+                "Live-Ready": "🟠",
+                "Studio-Ready": "🟣",
+                "Forked": "🟢"
             }
             icon = status_icons.get(row['Status'], "⚪")
-            title = f"{icon}  -  **{row['Goal']}** - by - {row['Target Date'].date()} - currently: **{row['Status']}**"
-            # title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon}"
+            title = f"**{row['Goal']}** - {row['Target Date'].date()} - **{row['Status']}** - {icon}"
             with st.expander(title, expanded=False):
                 st.write(f"**Details:** {row['Details']}")
                 col1, col2 = st.columns(2)
@@ -309,7 +270,7 @@ with st.expander("View Goals", expanded=True):
         st.write("No goals set yet.")
 
 # --- Archived Goals ---
-with st.expander("Done Pile", expanded=False):
+with st.expander("Archived Goals", expanded=False):
     data = load_data()
     archives_df = pd.DataFrame(data.get("archives", []))
     if not archives_df.empty:
