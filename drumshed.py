@@ -1,34 +1,22 @@
 import streamlit as st
-import threading
-import time
 import os
 import re
 from datetime import datetime
 import json
 import pandas as pd
-import numpy as np
-import soundfile as sf
-import io
+# import numpy as np
+# import soundfile as sf
+# import io
 
 # --- Constants ---
 DATA_FILE = "data.json"
 SOUNDS_FOLDER = "./sounds"
 
-# --- Initialize Session State Variables ---
-# These should be initialized once at startup
-for key, default in [
-    ('is_running', False),
-    ('stop_metronome', False),
-    ('current_beat', 0),
-    ('audio_trigger', False),
-    ('should_rerun', False),
-    ('tempo', 120),
-    ('feel', "1/4"),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
+# Initialize session state variables
+if "is_running" not in st.session_state:
+    st.session_state['is_running'] = False
 
-# --- Load Data ---
+# --- Load Data File For Practice Notes etc.. ---
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -40,91 +28,45 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, default=str, indent=2)
 
-# --- Generate Beep Sound ---
-def generate_beep():
-    t = np.linspace(0, 0.1, int(44100 * 0.1), False)
-    tone = np.sin(1000 * t * 2 * np.pi)
-    audio = (tone * 32767).astype(np.int16)
-    buf = io.BytesIO()
-    sf.write(buf, audio, 44100, format='WAV')
-    buf.seek(0)
-    return buf.read()
 
-beep_bytes = generate_beep()
-
-# --- Load Selected Sound ---
-def load_sound(path):
-    data, sr = sf.read(path, dtype='float32')
-    return data, sr
+# Load sound file as base64
+import base64
 
 # --- UI: Title and Settings ---
 # st.title("🎶Drumshed🎶")
-
 # only logo full page
 st.image("images/logo.jpeg", use_container_width=True)
+
 st.subheader("Metronome")
-
 # --- Select Sound ---
-sounds_files = [f for f in os.listdir(SOUNDS_FOLDER) if os.path.isfile(os.path.join(SOUNDS_FOLDER, f))]
-selected_sound = st.selectbox("Select Click Sound", sounds_files)
-sound_path = os.path.join(SOUNDS_FOLDER, selected_sound)
-sound_array, sr = load_sound(sound_path)
+sound_folder = "./sounds"
+sound_files = [f for f in os.listdir(sound_folder) if f.endswith(('.wav', '.mp3', '.ogg'))]
+selected_sound = st.selectbox("Click Sounds", sound_files)
+sound_path = os.path.join(sound_folder, selected_sound)
 
-# --- Sliders and Selectboxes ---
-col1, col2 = st.columns([2, 1])
+with open(sound_path, "rb") as f:
+    sound_bytes = f.read()
+sound_base64 = base64.b64encode(sound_bytes).decode()
+
+# --- Sliders and Select Boxes
+col1, col2 = st.columns([3,1])
 with col1:
-    st.session_state['tempo'] = st.slider("Tempo (BPM)", 40, 200, st.session_state['tempo'])
+    st.slider("Tempo", 40, 200, 120, key="tempo")
 with col2:
-    st.session_state['feel'] = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"], index=["1/4", "1/8", "Triplet", "1/16"].index(st.session_state['feel']))
+    feel_option = st.selectbox("Feel", ["1/4", "1/8", "Triplet", "1/16"], index=0, )
+    feel_map = {
+        "1/4": lambda bpm: 60.0 / bpm,
+        "1/8": lambda bpm: 60.0 / (bpm * 2),
+        "Triplet": lambda bpm: 60.0 / (bpm * 3),
+        "1/16": lambda bpm: 60.0 / (bpm * 4)
+    }
+# --- calculated time interval ---
+interval = feel_map[feel_option](st.session_state["tempo"])
+# st.write(f"Interval: {interval:.2f} seconds.")
 
-# --- Start/Stop Button ---
-def start_stop():
-    if not st.session_state['is_running']:
-        st.session_state['is_running'] = True
-        st.session_state['stop_metronome'] = False
-        st.session_state['current_beat'] = 0
-        st.session_state['audio_trigger'] = False
-        start_metronome(st.session_state['tempo'])
-        st.rerun()
-    else:
-        st.session_state['stop_metronome'] = True
-        st.session_state['is_running'] = False
-        st.rerun()
+if st.button("Start / Stop", use_container_width=True):
+        st.session_state['is_running'] = not st.session_state['is_running']
 
-st.button("Start" if not st.session_state['is_running'] else "Stop", on_click=start_stop)
-
-# --- Background Metronome Thread ---
-def start_metronome(tempo):
-    def metronome():
-        interval = 60.0 / tempo
-        while not st.session_state['stop_metronome']:
-            # Signal main app to play sound
-            st.session_state['audio_trigger'] = True
-            st.session_state['current_beat'] += 1
-            # Set rerun flag
-            st.session_state['should_rerun'] = True
-            time.sleep(interval)
-    t = threading.Thread(target=metronome, daemon=True)
-    st.session_state['metronome_thread'] = t
-    t.start()
-
-# --- Check if rerun is needed ---
-if st.session_state.get('should_rerun', False):
-    st.session_state['should_rerun'] = False
-    st.rerun()
-
-# --- Play beep when triggered ---
-if st.session_state.get('audio_trigger', False):
-    st.audio(beep_bytes, format='audio/wav')
-    st.session_state['audio_trigger'] = False
-
-# --- Display current beat ---
-st.write(f"Current Beat: {st.session_state.get('current_beat', 0)}")
-
-
-import os
-import re
-import streamlit as st
 
 # --- Practice Material Section ---
 st.subheader("Practice Files")
@@ -324,3 +266,38 @@ with st.expander("Done Pile", expanded=False):
                     st.rerun()
     else:
         st.write("No archived goals.")
+
+## rendering javascript down here 
+# JavaScript for playing sound
+js_code = f"""
+<script>
+var sound = new Audio("data:audio/wav;base64,{sound_base64}");
+var interval = {interval * 1000}; // milliseconds
+var timer;
+
+function startMetronome() {{
+    if (!timer) {{
+        sound.currentTime = 0;
+        sound.play();
+        timer = setInterval(() => {{
+            sound.currentTime = 0;
+            sound.play();
+        }}, interval);
+    }}
+}}
+
+function stopMetronome() {{
+    clearInterval(timer);
+    timer = null;
+}}
+
+if ({str(st.session_state['is_running']).lower()}) {{
+    startMetronome();
+}} else {{
+    stopMetronome();
+}}
+</script>
+"""
+
+# Render the JavaScript
+st.components.v1.html(js_code)
