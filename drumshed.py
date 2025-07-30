@@ -12,6 +12,7 @@ import pandas as pd
 DATA_FILE = "data.json"
 SOUNDS_FOLDER = "./sounds"
 
+
 # Initialize session state variables
 if "is_running" not in st.session_state:
     st.session_state['is_running'] = False
@@ -66,6 +67,36 @@ interval = feel_map[feel_option](st.session_state["tempo"])
 
 if st.button("Start / Stop", use_container_width=True):
         st.session_state['is_running'] = not st.session_state['is_running']
+
+js_code = f"""
+<script>
+var sound = new Audio("data:audio/wav;base64,{sound_base64}");
+var interval = {interval * 1000}; // milliseconds
+var timer;
+
+function startMetronome() {{
+    if (!timer) {{
+        sound.currentTime = 0;
+        sound.play();
+        timer = setInterval(() => {{
+            sound.currentTime = 0;
+            sound.play();
+        }}, interval);
+    }}
+}}
+
+function stopMetronome() {{
+    clearInterval(timer);
+    timer = null;
+}}
+
+if ({str(st.session_state['is_running']).lower()}) {{
+    startMetronome();
+}} else {{
+    stopMetronome();
+}}
+</script>
+"""
 
 
 # --- Practice Material Section ---
@@ -147,10 +178,12 @@ with st.expander("Add Notes", expanded=False):
     if st.button("Save Notes"):
         data = load_data()
         data["practice_log"].append({
-            "timestamp": str(datetime.now()),
+            "timestamp": str(datetime.now().replace(microsecond=0)),
             "entry": diary
         })
         save_data(data)
+
+# strftime("%B %d, %Y %I:%M%p").lower()
 
 with st.expander("View Notes", expanded=True):
     data = load_data()
@@ -268,36 +301,36 @@ with st.expander("Done Pile", expanded=False):
         st.write("No archived goals.")
 
 ## rendering javascript down here 
-# JavaScript for playing sound
-js_code = f"""
-<script>
-var sound = new Audio("data:audio/wav;base64,{sound_base64}");
-var interval = {interval * 1000}; // milliseconds
-var timer;
+# # JavaScript for playing sound
+# js_code = f"""
+# <script>
+# var sound = new Audio("data:audio/wav;base64,{sound_base64}");
+# var interval = {interval * 1000}; // milliseconds
+# var timer;
 
-function startMetronome() {{
-    if (!timer) {{
-        sound.currentTime = 0;
-        sound.play();
-        timer = setInterval(() => {{
-            sound.currentTime = 0;
-            sound.play();
-        }}, interval);
-    }}
-}}
+# function startMetronome() {{
+#     if (!timer) {{
+#         sound.currentTime = 0;
+#         sound.play();
+#         timer = setInterval(() => {{
+#             sound.currentTime = 0;
+#             sound.play();
+#         }}, interval);
+#     }}
+# }}
 
-function stopMetronome() {{
-    clearInterval(timer);
-    timer = null;
-}}
+# function stopMetronome() {{
+#     clearInterval(timer);
+#     timer = null;
+# }}
 
-if ({str(st.session_state['is_running']).lower()}) {{
-    startMetronome();
-}} else {{
-    stopMetronome();
-}}
-</script>
-"""
+# if ({str(st.session_state['is_running']).lower()}) {{
+#     startMetronome();
+# }} else {{
+#     stopMetronome();
+# }}
+# </script>
+# """
 
 # Render the JavaScript
 st.components.v1.html(js_code)
